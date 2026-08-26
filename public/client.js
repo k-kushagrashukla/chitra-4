@@ -25,13 +25,13 @@ const guessInput = document.getElementById("guessInput");
 const wordChoiceModal = document.getElementById("wordChoiceModal");
 const wordChoicesDiv = document.getElementById("wordChoices");
 const clearBtn = document.getElementById("clearBtn");
+const debugCounter = document.getElementById("debugCounter");
 
 let myId = null;
 let isDrawer = false;
 let currentTool = "pen";
 let roomId = null;
 
-// ---------- Tool styles ----------
 const TOOLS = {
   pen:    { width: 2.5, opacity: 1.0,  jitter: 0,   color: "31,78,140"  },
   marker: { width: 8,   opacity: 1.0,  jitter: 0,   color: "32,28,24"   },
@@ -47,7 +47,6 @@ document.querySelectorAll(".tool[data-tool]").forEach((btn) => {
   });
 });
 
-// ---------- Canvas setup ----------
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
@@ -101,6 +100,7 @@ function drawSegment(from, to, tool) {
 
 let drawing = false;
 let lastPos = null;
+let strokesSent = 0;
 
 function pointerDown(e) {
   if (!isDrawer) return;
@@ -113,6 +113,8 @@ function pointerMove(e) {
   const pos = getPos(e);
   drawSegment(lastPos, pos, currentTool);
   socket.emit("stroke", { from: toFraction(lastPos), to: toFraction(pos), tool: currentTool });
+  strokesSent += 1;
+  debugCounter.textContent = `strokes sent: ${strokesSent}`;
   lastPos = pos;
 }
 function pointerUp() {
@@ -132,7 +134,12 @@ clearBtn.addEventListener("click", () => {
   socket.emit("clearCanvas");
 });
 
-socket.on("stroke", ({ from, to, tool }) => drawSegment(fromFraction(from), fromFraction(to), tool));
+let strokesReceived = 0;
+socket.on("stroke", ({ from, to, tool }) => {
+  strokesReceived += 1;
+  debugCounter.textContent = `strokes received: ${strokesReceived}`;
+  drawSegment(fromFraction(from), fromFraction(to), tool);
+});
 socket.on("clearCanvas", () => ctx.clearRect(0, 0, canvas.width, canvas.height));
 
 // ---------- Join flow ----------
@@ -219,6 +226,10 @@ socket.on("yourWord", (wordObj) => {
 
 socket.on("roundStarted", () => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  strokesReceived = 0;
+  debugCounter.textContent = "strokes received: 0";
+  const rect = canvas.getBoundingClientRect();
+  console.log(`[Chitra debug] new turn started. Canvas rect: ${rect.width}x${rect.height}, buffer: ${canvas.width}x${canvas.height}`);
 });
 
 socket.on("turnEnded", ({ reason, word }) => {

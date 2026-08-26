@@ -373,6 +373,11 @@ body {
   letter-spacing: 6px;
   color: var(--paper);
   min-height: 1.4em;
+}.debug-counter {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.4);
+  min-height: 1em;
 }
 
 .notebook-canvas {
