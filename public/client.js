@@ -32,13 +32,11 @@ let currentTool = "pen";
 let roomId = null;
 
 // ---------- Tool styles ----------
-// Not a color picker — each tool is a real stationery item with its own fixed ink,
-// same as it would be in your pencil box. No arbitrary color choice, just which item you pick up.
 const TOOLS = {
-  pen:    { width: 2.5, opacity: 1.0,  jitter: 0,   color: "31,78,140"  }, // ballpoint blue
-  marker: { width: 8,   opacity: 1.0,  jitter: 0,   color: "32,28,24"   }, // gel pen black
-  pencil: { width: 2,   opacity: 0.55, jitter: 0,   color: "50,45,40"   }, // pencil grey
-  sketch: { width: 3,   opacity: 0.85, jitter: 2.2, color: "178,58,46"  }, // teacher's red pen
+  pen:    { width: 2.5, opacity: 1.0,  jitter: 0,   color: "31,78,140"  },
+  marker: { width: 8,   opacity: 1.0,  jitter: 0,   color: "32,28,24"   },
+  pencil: { width: 2,   opacity: 0.55, jitter: 0,   color: "50,45,40"   },
+  sketch: { width: 3,   opacity: 0.85, jitter: 2.2, color: "178,58,46"  },
 };
 
 document.querySelectorAll(".tool[data-tool]").forEach((btn) => {
@@ -60,7 +58,6 @@ function resizeCanvas() {
   ctx.lineJoin = "round";
 }
 window.addEventListener("resize", () => {
-  // Note: this clears the canvas on resize (fine for MVP; strokes aren't persisted client-side).
   resizeCanvas();
 });
 
@@ -71,9 +68,6 @@ function getPos(e) {
   return { x: clientX - rect.left, y: clientY - rect.top };
 }
 
-// Convert a raw pixel position into a 0-1 fraction of the CURRENT canvas size,
-// so a stroke drawn on a wide laptop canvas can be faithfully redrawn on a
-// much narrower phone canvas (and vice versa) instead of falling off the edge.
 function toFraction(pos) {
   const rect = canvas.getBoundingClientRect();
   return { x: pos.x / rect.width, y: pos.y / rect.height };
@@ -89,7 +83,6 @@ function drawSegment(from, to, tool) {
   ctx.lineWidth = style.width;
 
   if (style.jitter > 0) {
-    // Sketch tool: draw a couple of jittered offset lines for a rough, hand-drawn feel.
     for (let i = 0; i < 2; i++) {
       const jx = (Math.random() - 0.5) * style.jitter;
       const jy = (Math.random() - 0.5) * style.jitter;
@@ -139,16 +132,12 @@ clearBtn.addEventListener("click", () => {
   socket.emit("clearCanvas");
 });
 
-// Remote strokes from the drawer, and remote clears — the drawer sends
-// fractional (0-1) coordinates so this scales correctly to OUR OWN canvas
-// size, whatever device we're on.
 socket.on("stroke", ({ from, to, tool }) => drawSegment(fromFraction(from), fromFraction(to), tool));
 socket.on("clearCanvas", () => ctx.clearRect(0, 0, canvas.width, canvas.height));
 
 // ---------- Join flow ----------
 joinBtn.addEventListener("click", () => {
   const name = nameInput.value.trim() || "Player";
-  // Digits only — no letters means no upper/lowercase mismatch between devices.
   roomId = (roomInput.value || "").replace(/\D/g, "").trim() || String(Math.floor(1000 + Math.random() * 9000));
   socket.emit("joinRoom", { roomId, name });
   joinScreen.classList.add("hidden");
@@ -186,7 +175,6 @@ socket.on("state", (state) => {
   canvas.style.cursor = isDrawer ? "crosshair" : "not-allowed";
   const isHost = state.hostId === myId;
 
-  // The drawer already knows the word, so they can't draw AND guess — only guessers guess.
   guessInput.disabled = isDrawer;
   guessInput.placeholder = isDrawer ? "You're drawing, sit back and watch guesses roll in" : "Type your guess…";
   document.querySelectorAll(".tool").forEach((b) => (b.disabled = !isDrawer));
@@ -203,8 +191,7 @@ socket.on("state", (state) => {
     startBtn.classList.add("hidden");
   } else if (state.phase === "drawing") {
     boardStatus.textContent = isDrawer ? "Draw it!" : "Guess the drawing!";
-    if (isDrawer) wordBlank.textContent = ""; // drawer's own word is set separately via the "yourWord" event
-    // Guessers get no letter-count hint at all now — just the prompt above.
+    if (isDrawer) wordBlank.textContent = "";
   } else if (state.phase === "roundEnd") {
     startBtn.classList.add("hidden");
   } else if (state.phase === "gameEnd") {
