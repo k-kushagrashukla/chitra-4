@@ -48,13 +48,6 @@ document.querySelectorAll(".tool[data-tool]").forEach((btn) => {
 });
 
 // ---------- Canvas setup ----------
-// Every stroke of the CURRENT turn lives here (fractional 0-1 form, same as
-// what's sent over the socket). Mobile browsers fire "resize" far more often
-// than desktop ones (address bar hiding while scrolling, layout shifts,
-// keyboard events) — every one of those used to silently wipe the canvas via
-// canvas.width reassignment, permanently losing anything drawn before that
-// moment. That was the real bug. A resize now replays this history instead
-// of losing it.
 let turnStrokes = [];
 
 function resizeCanvas() {
@@ -109,28 +102,32 @@ function drawSegment(from, to, tool) {
 
 let drawing = false;
 let lastPos = null;
-let strokesSent = 0;
-const MIN_STROKE_DISTANCE = 2.5; // px — below this, skip sending (still drawn locally, just not broadcast)
+let lastSentPos = null;
 
 function pointerDown(e) {
   if (!isDrawer) return;
   drawing = true;
   lastPos = getPos(e);
+  lastSentPos = lastPos;
 }
+let strokesSent = 0;
+const MIN_STROKE_DISTANCE = 2.5;
 function pointerMove(e) {
   if (!isDrawer || !drawing) return;
   e.preventDefault();
   const pos = getPos(e);
   drawSegment(lastPos, pos, currentTool);
-  const dx = pos.x - lastPos.x, dy = pos.y - lastPos.y;
+  lastPos = pos;
+
+  const dx = pos.x - lastSentPos.x, dy = pos.y - lastSentPos.y;
   if (Math.sqrt(dx * dx + dy * dy) >= MIN_STROKE_DISTANCE) {
-    const stroke = { from: toFraction(lastPos), to: toFraction(pos), tool: currentTool };
+    const stroke = { from: toFraction(lastSentPos), to: toFraction(pos), tool: currentTool };
     turnStrokes.push(stroke);
     socket.emit("stroke", stroke);
     strokesSent += 1;
     debugCounter.textContent = `strokes sent: ${strokesSent}`;
+    lastSentPos = pos;
   }
-  lastPos = pos;
 }
 function pointerUp() {
   drawing = false;
