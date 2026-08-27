@@ -47,6 +47,16 @@ document.querySelectorAll(".tool[data-tool]").forEach((btn) => {
   });
 });
 
+// ---------- Canvas setup ----------
+// Every stroke of the CURRENT turn lives here (fractional 0-1 form, same as
+// what's sent over the socket). Mobile browsers fire "resize" far more often
+// than desktop ones (address bar hiding while scrolling, layout shifts,
+// keyboard events) — every one of those used to silently wipe the canvas via
+// canvas.width reassignment, permanently losing anything drawn before that
+// moment. That was the real bug. A resize now replays this history instead
+// of losing it.
+let turnStrokes = [];
+
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
@@ -55,10 +65,9 @@ function resizeCanvas() {
   ctx.scale(ratio, ratio);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  turnStrokes.forEach((s) => drawSegment(fromFraction(s.from), fromFraction(s.to), s.tool));
 }
-window.addEventListener("resize", () => {
-  resizeCanvas();
-});
+window.addEventListener("resize", resizeCanvas);
 
 function getPos(e) {
   const rect = canvas.getBoundingClientRect();
@@ -101,6 +110,7 @@ function drawSegment(from, to, tool) {
 let drawing = false;
 let lastPos = null;
 let strokesSent = 0;
+const MIN_STROKE_DISTANCE = 2.5; // px — below this, skip sending (still drawn locally, just not broadcast)
 
 function pointerDown(e) {
   if (!isDrawer) return;
@@ -112,9 +122,14 @@ function pointerMove(e) {
   e.preventDefault();
   const pos = getPos(e);
   drawSegment(lastPos, pos, currentTool);
-  socket.emit("stroke", { from: toFraction(lastPos), to: toFraction(pos), tool: currentTool });
-  strokesSent += 1;
-  debugCounter.textContent = `strokes sent: ${strokesSent}`;
+  const dx = pos.x - lastPos.x, dy = pos.y - lastPos.y;
+  if (Math.sqrt(dx * dx + dy * dy) >= MIN_STROKE_DISTANCE) {
+    const stroke = { from: toFraction(lastPos), to: toFraction(pos), tool: currentTool };
+    turnStrokes.push(stroke);
+    socket.emit("stroke", stroke);
+    strokesSent += 1;
+    debugCounter.textContent = `strokes sent: ${strokesSent}`;
+  }
   lastPos = pos;
 }
 function pointerUp() {
@@ -135,10 +150,11 @@ clearBtn.addEventListener("click", () => {
 });
 
 let strokesReceived = 0;
-socket.on("stroke", ({ from, to, tool }) => {
+socket.on("stroke", (stroke) => {
   strokesReceived += 1;
   debugCounter.textContent = `strokes received: ${strokesReceived}`;
-  drawSegment(fromFraction(from), fromFraction(to), tool);
+  turnStrokes.push(stroke);
+  drawSegment(fromFraction(stroke.from), fromFraction(stroke.to), stroke.tool);
 });
 socket.on("clearCanvas", () => ctx.clearRect(0, 0, canvas.width, canvas.height));
 
@@ -222,14 +238,17 @@ socket.on("wordChoices", (choices) => {
 
 socket.on("yourWord", (wordObj) => {
   wordBlank.textContent = `${wordObj.word} (${wordObj.hint})`;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  turnStrokes = [];
+  strokesSent = 0;
+  debugCounter.textContent = "strokes sent: 0";
 });
 
 socket.on("roundStarted", () => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  turnStrokes = [];
   strokesReceived = 0;
   debugCounter.textContent = "strokes received: 0";
-  const rect = canvas.getBoundingClientRect();
-  console.log(`[Chitra debug] new turn started. Canvas rect: ${rect.width}x${rect.height}, buffer: ${canvas.width}x${canvas.height}`);
 });
 
 socket.on("turnEnded", ({ reason, word }) => {
