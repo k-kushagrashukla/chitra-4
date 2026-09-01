@@ -74,7 +74,34 @@
         <p>Send a friend a tough prompt. 15 seconds. Prove it.</p>
       </button>
     </div>
+
+    <button class="coffee-link" id="coffeeBtn">☕ Buy me a chai</button>
   </section>
+
+  <!-- COFFEE MODAL -->
+  <div id="coffeeModal" class="modal hidden">
+    <div class="modal-card coffee-card">
+      <button class="modal-close" id="coffeeCloseBtn">✕</button>
+      <h2>Buy me a chai</h2>
+      <p class="hint-text">Chitra is free to play. If you enjoyed it and want to help cover the AI costs behind Speed Sketch and the challenges, a small tip means a lot. Totally optional, never required.</p>
+
+      <div class="coffee-amounts">
+        <button class="coffee-amount-btn" data-amount="50">₹50</button>
+        <button class="coffee-amount-btn" data-amount="60">₹60</button>
+        <button class="coffee-amount-btn" data-amount="100">₹100</button>
+      </div>
+      <div class="coffee-custom">
+        <input type="number" id="coffeeCustomAmount" placeholder="Or enter any amount" min="1" />
+        <button id="coffeeCustomPayBtn" class="btn-primary btn-small">Pay</button>
+      </div>
+
+      <div class="coffee-qr-section">
+        <p class="hint-text">On a laptop? Scan this with any UPI app instead:</p>
+        <img id="coffeeQr" alt="UPI QR code" width="160" height="160" />
+        <p class="coffee-upi-id">UPI ID: <span id="coffeeUpiIdText"></span> <button id="coffeeCopyUpiBtn" class="btn-primary btn-small btn-ghost">Copy</button></p>
+      </div>
+    </div>
+  </div>
 
   <!-- JOIN SCREEN (multiplayer) -->
   <section id="joinScreen" class="screen centered-screen hidden">
@@ -115,7 +142,6 @@
       <div class="board-frame">
         <div class="board-status" id="boardStatus">Waiting for players…</div>
         <div class="word-blank" id="wordBlank"></div>
-        <div class="debug-counter" id="debugCounter"></div>
         <canvas id="canvas" class="notebook-canvas"></canvas>
         <div class="toolbar">
           <button class="tool active" data-tool="pen">Ballpoint</button>
@@ -219,6 +245,7 @@
         <button class="tool" data-ch-tool="marker">Gel Pen</button>
         <button class="tool" data-ch-tool="pencil">Pencil</button>
         <button class="tool" data-ch-tool="sketch">Red Pen</button>
+        <button id="challengeClearBtn" class="tool danger">Rub it out</button>
       </div>
     </div>
     <div class="timer hidden" id="challengeTimerDisplay">--</div>
@@ -264,6 +291,64 @@
     document.getElementById("cardChallenge").addEventListener("click", () => showScreen("challengeCreateScreen"));
     document.querySelectorAll(".back-link").forEach((btn) => {
       btn.addEventListener("click", () => showScreen(btn.dataset.backTo));
+    });
+
+    // ---------- Coffee / UPI tip ----------
+    // Note: UPI deep links (upi://pay?...) only do anything on a phone with a
+    // UPI app installed (GPay, PhonePe, Paytm, etc). On a laptop there's
+    // nothing to open them, so we also show a QR code (built via a public,
+    // widely-used QR generator API — no library needed) that a phone can
+    // scan instead, plus the raw UPI ID for manual entry either way.
+    const UPI_ID = "kushagra.shukla396@oksbi";
+    const PAYEE_NAME = "Chitra";
+
+    function buildUpiLink(amount) {
+      const params = new URLSearchParams({
+        pa: UPI_ID,
+        pn: PAYEE_NAME,
+        cu: "INR",
+        tn: "Chitra tip",
+      });
+      if (amount) params.set("am", amount);
+      return `upi://pay?${params.toString()}`;
+    }
+
+    function updateCoffeeQr() {
+      const qrData = encodeURIComponent(buildUpiLink(""));
+      document.getElementById("coffeeQr").src =
+        `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${qrData}`;
+      document.getElementById("coffeeUpiIdText").textContent = UPI_ID;
+    }
+
+    document.getElementById("coffeeBtn").addEventListener("click", () => {
+      updateCoffeeQr();
+      document.getElementById("coffeeModal").classList.remove("hidden");
+    });
+    document.getElementById("coffeeCloseBtn").addEventListener("click", () => {
+      document.getElementById("coffeeModal").classList.add("hidden");
+    });
+
+        document.querySelectorAll(".coffee-amount-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".coffee-amount-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById("coffeeCustomAmount").value = btn.dataset.amount;
+      });
+    });
+    document.getElementById("coffeeCustomAmount").addEventListener("input", () => {
+      document.querySelectorAll(".coffee-amount-btn").forEach((b) => b.classList.remove("active"));
+    });
+    document.getElementById("coffeeCustomPayBtn").addEventListener("click", () => {
+      const amt = document.getElementById("coffeeCustomAmount").value;
+      if (!amt || Number(amt) <= 0) return;
+      window.location.href = buildUpiLink(amt);
+    });
+    document.getElementById("coffeeCopyUpiBtn").addEventListener("click", async (e) => {
+      try {
+        await navigator.clipboard.writeText(UPI_ID);
+        e.target.textContent = "Copied!";
+        setTimeout(() => (e.target.textContent = "Copy"), 1500);
+      } catch {}
     });
   </script>
 

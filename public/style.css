@@ -114,6 +114,59 @@ body {
 .mode-card p { font-size: 0.92rem; opacity: 0.8; margin: 0; line-height: 1.4; }
 .mode-card.locked { opacity: 0.55; cursor: not-allowed; }
 .mode-card.locked:hover { transform: none; }
+
+.coffee-link {
+  position: relative;
+  z-index: 1;
+  margin-top: 6px;
+  background: transparent;
+  border: 1px solid rgba(247,241,223,0.3);
+  color: var(--paper);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-family: "Kalam", cursive;
+  font-size: 0.85rem;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.coffee-link:hover { opacity: 1; background: rgba(247,241,223,0.08); }
+
+.coffee-card { text-align: left; position: relative; }
+.modal-close {
+  position: absolute;
+  top: 10px; right: 10px;
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--ink-text);
+  opacity: 0.6;
+}
+.modal-close:hover { opacity: 1; }
+.coffee-amounts { display: flex; gap: 10px; margin: 14px 0 10px; }
+.coffee-amount-btn {
+  flex: 1;
+  background: #fffdf7;
+  border: 1px solid rgba(0,0,0,0.2);
+  padding: 10px;
+  border-radius: 4px;
+  font-family: "Kalam", cursive;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.coffee-amount-btn:hover { border-color: var(--margin-red); color: var(--margin-red); }
+.coffee-amount-btn.active { border-color: var(--margin-red); color: var(--margin-red); background: #fff8e8; }
+.coffee-custom { display: flex; gap: 8px; margin-bottom: 16px; }
+.coffee-custom input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(0,0,0,0.2);
+  font-family: "Inter", sans-serif;
+}
+.coffee-qr-section { text-align: center; border-top: 1px dashed rgba(0,0,0,0.2); padding-top: 14px; }
+.coffee-qr-section img { display: block; margin: 8px auto; border-radius: 4px; }
+.coffee-upi-id { font-family: monospace; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .coming-soon-tag {
   display: inline-block;
   font-family: "Kalam", cursive;
@@ -373,11 +426,6 @@ body {
   letter-spacing: 6px;
   color: var(--paper);
   min-height: 1.4em;
-}.debug-counter {
-  font-family: monospace;
-  font-size: 0.7rem;
-  color: rgba(255,255,255,0.4);
-  min-height: 1em;
 }
 
 .notebook-canvas {

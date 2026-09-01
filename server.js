@@ -15,6 +15,19 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// ---------- Usage stats (private, for you only) ----------
+// Simple in-memory counters — no database needed for this stage. They reset
+// when the server restarts (e.g. on a redeploy), which is a known limitation
+// worth knowing: this tells you "usage since last restart", not lifetime totals.
+const stats = {
+  serverStartedAt: Date.now(),
+  totalConnectionsEver: 0,
+  totalGamesStarted: 0,
+  totalSpeedSketchJudged: 0,
+  totalChallengesCreated: 0,
+  totalChallengeAttempts: 0,
+};
+
 app.use(express.static(path.join(__dirname, "public"), {
   // Without this, browsers (mobile Chrome especially) can keep serving an old
   // cached copy of client.js/style.css after a redeploy — meaning a fixed bug
@@ -91,6 +104,7 @@ app.post("/api/speed-sketch/judge", async (req, res) => {
     } catch {
       parsed = { score: 5, verdict: "Couldn't quite judge that one, but hey, you drew something!" };
     }
+    stats.totalSpeedSketchJudged += 1;
     res.json(parsed);
   } catch (err) {
     console.error("Speed Sketch judging failed:", err);
@@ -118,6 +132,7 @@ app.post("/api/challenge/create", (req, res) => {
   const id = makeChallengeId();
   const prompt = getChallengeWord();
   challenges[id] = { ...prompt, createdAt: Date.now() };
+  stats.totalChallengesCreated += 1;
   res.json({ id, ...prompt });
 });
 
@@ -182,6 +197,7 @@ app.post("/api/challenge/:id/judge", async (req, res) => {
     } catch {
       parsed = { passed: false, verdict: "Couldn't judge that one, give it another go!" };
     }
+    stats.totalChallengeAttempts += 1;
     res.json(parsed);
   } catch (err) {
     console.error("Challenge judging failed:", err);
@@ -193,6 +209,73 @@ app.post("/api/challenge/:id/judge", async (req, res) => {
 // client reads the id out of the URL and shows the attempt screen directly.
 app.get("/challenge/:id", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// ---------- Private admin dashboard (you only) ----------
+// Protected by a password in the URL, not indexed/linked anywhere on the
+// public site. Set ADMIN_KEY in your .env — without it, this route refuses
+// to work at all, so it's never accidentally left wide open.
+function checkAdminKey(req, res) {
+  if (!process.env.ADMIN_KEY) {
+    res.status(500).send("Set ADMIN_KEY in your .env to use the admin dashboard.");
+    return false;
+  }
+  if (req.query.key !== process.env.ADMIN_KEY) {
+    res.status(403).send("Wrong or missing key. Add ?key=YOUR_ADMIN_KEY to the URL.");
+    return false;
+  }
+  return true;
+}
+
+app.get("/admin/stats", (req, res) => {
+  if (!checkAdminKey(req, res)) return;
+  res.json({
+    liveUsersRightNow: io.engine.clientsCount,
+    liveRoomsRightNow: Object.keys(rooms).length,
+    totalConnectionsSinceRestart: stats.totalConnectionsEver,
+    totalGamesStartedSinceRestart: stats.totalGamesStarted,
+    totalSpeedSketchJudgedSinceRestart: stats.totalSpeedSketchJudged,
+    totalChallengesCreatedSinceRestart: stats.totalChallengesCreated,
+    totalChallengeAttemptsSinceRestart: stats.totalChallengeAttempts,
+    serverUptimeMinutes: Math.round((Date.now() - stats.serverStartedAt) / 60000),
+  });
+});
+
+app.get("/admin", (req, res) => {
+  if (!checkAdminKey(req, res)) return;
+  const key = encodeURIComponent(req.query.key);
+  res.send(`<!DOCTYPE html>
+<html><head><title>Chitra Admin</title>
+<style>
+  body { font-family: monospace; background: #1a1410; color: #f7f1df; padding: 30px; }
+  h1 { color: #b23a2e; }
+  .stat { font-size: 1.3rem; margin: 10px 0; }
+  .stat b { color: #f7f1df; }
+  .label { opacity: 0.6; font-size: 0.85rem; }
+</style></head>
+<body>
+  <h1>Chitra — Live Stats</h1>
+  <div id="stats">Loading…</div>
+  <p class="label">Auto-refreshes every 5s. Counts reset if the server restarts (e.g. on redeploy).</p>
+  <script>
+    async function refresh() {
+      const res = await fetch('/admin/stats?key=${key}');
+      const s = await res.json();
+      document.getElementById('stats').innerHTML = \`
+        <div class="stat">🟢 Live users right now: <b>\${s.liveUsersRightNow}</b></div>
+        <div class="stat">🏠 Live rooms right now: <b>\${s.liveRoomsRightNow}</b></div>
+        <div class="stat">👥 Total connections since restart: <b>\${s.totalConnectionsSinceRestart}</b></div>
+        <div class="stat">🎮 Games started since restart: <b>\${s.totalGamesStartedSinceRestart}</b></div>
+        <div class="stat">🎨 Speed Sketch drawings judged: <b>\${s.totalSpeedSketchJudgedSinceRestart}</b></div>
+        <div class="stat">🔗 Challenge links created: <b>\${s.totalChallengesCreatedSinceRestart}</b></div>
+        <div class="stat">✅ Challenge attempts judged: <b>\${s.totalChallengeAttemptsSinceRestart}</b></div>
+        <div class="stat">⏱️ Server uptime: <b>\${s.serverUptimeMinutes} min</b></div>
+      \`;
+    }
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body></html>`);
 });
 
 const TURN_SECONDS = 70;
@@ -334,6 +417,7 @@ function allGuessed(room) {
 }
 
 io.on("connection", (socket) => {
+  stats.totalConnectionsEver += 1;
   socket.on("joinRoom", ({ roomId, name }) => {
     const room = getRoom(roomId);
     socket.join(roomId);
@@ -347,6 +431,7 @@ io.on("connection", (socket) => {
     const room = rooms[socket.data.roomId];
     if (!room || room.phase !== "lobby") return;
     if (socket.id !== room.hostId) return; // only the host can start
+    stats.totalGamesStarted += 1;
     room.round = 1;
     room.turnCount = -1;
     room.players.forEach((p) => (p.score = 0));

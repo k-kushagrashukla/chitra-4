@@ -70,6 +70,10 @@
       currentTool = btn.dataset.chTool;
     });
   });
+  document.getElementById("challengeClearBtn").addEventListener("click", () => {
+    if (!drawingActive) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  });
 
   function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();

@@ -25,18 +25,20 @@ const guessInput = document.getElementById("guessInput");
 const wordChoiceModal = document.getElementById("wordChoiceModal");
 const wordChoicesDiv = document.getElementById("wordChoices");
 const clearBtn = document.getElementById("clearBtn");
-const debugCounter = document.getElementById("debugCounter");
 
 let myId = null;
 let isDrawer = false;
 let currentTool = "pen";
 let roomId = null;
 
+// ---------- Tool styles ----------
+// Not a color picker — each tool is a real stationery item with its own fixed ink,
+// same as it would be in your pencil box. No arbitrary color choice, just which item you pick up.
 const TOOLS = {
-  pen:    { width: 2.5, opacity: 1.0,  jitter: 0,   color: "31,78,140"  },
-  marker: { width: 8,   opacity: 1.0,  jitter: 0,   color: "32,28,24"   },
-  pencil: { width: 2,   opacity: 0.55, jitter: 0,   color: "50,45,40"   },
-  sketch: { width: 3,   opacity: 0.85, jitter: 2.2, color: "178,58,46"  },
+  pen:    { width: 2.5, opacity: 1.0,  jitter: 0,   color: "31,78,140"  }, // ballpoint blue
+  marker: { width: 8,   opacity: 1.0,  jitter: 0,   color: "32,28,24"   }, // gel pen black
+  pencil: { width: 2,   opacity: 0.55, jitter: 0,   color: "50,45,40"   }, // pencil grey
+  sketch: { width: 3,   opacity: 0.85, jitter: 2.2, color: "178,58,46"  }, // teacher's red pen
 };
 
 document.querySelectorAll(".tool[data-tool]").forEach((btn) => {
@@ -48,6 +50,13 @@ document.querySelectorAll(".tool[data-tool]").forEach((btn) => {
 });
 
 // ---------- Canvas setup ----------
+// Every stroke of the CURRENT turn lives here (fractional 0-1 form, same as
+// what's sent over the socket). Mobile browsers fire "resize" far more often
+// than desktop ones (address bar hiding while scrolling, layout shifts,
+// keyboard events) — every one of those used to silently wipe the canvas via
+// the canvas.width reassignment below, permanently losing anything drawn
+// before that moment. That's the actual cause of the mystery partial/blank
+// drawings. Now a resize replays this history instead of losing it.
 let turnStrokes = [];
 
 function resizeCanvas() {
@@ -69,6 +78,9 @@ function getPos(e) {
   return { x: clientX - rect.left, y: clientY - rect.top };
 }
 
+// Convert a raw pixel position into a 0-1 fraction of the CURRENT canvas size,
+// so a stroke drawn on a wide laptop canvas can be faithfully redrawn on a
+// much narrower phone canvas (and vice versa) instead of falling off the edge.
 function toFraction(pos) {
   const rect = canvas.getBoundingClientRect();
   return { x: pos.x / rect.width, y: pos.y / rect.height };
@@ -84,6 +96,7 @@ function drawSegment(from, to, tool) {
   ctx.lineWidth = style.width;
 
   if (style.jitter > 0) {
+    // Sketch tool: draw a couple of jittered offset lines for a rough, hand-drawn feel.
     for (let i = 0; i < 2; i++) {
       const jx = (Math.random() - 0.5) * style.jitter;
       const jy = (Math.random() - 0.5) * style.jitter;
@@ -101,8 +114,8 @@ function drawSegment(from, to, tool) {
 }
 
 let drawing = false;
-let lastPos = null;
-let lastSentPos = null;
+let lastPos = null;     // updated every move, for smooth local drawing
+let lastSentPos = null; // only updated when we actually emit — this is what fixes the gaps
 
 function pointerDown(e) {
   if (!isDrawer) return;
@@ -110,22 +123,22 @@ function pointerDown(e) {
   lastPos = getPos(e);
   lastSentPos = lastPos;
 }
-let strokesSent = 0;
-const MIN_STROKE_DISTANCE = 2.5;
+const MIN_STROKE_DISTANCE = 2.5; // px — below this, accumulate distance rather than sending yet
 function pointerMove(e) {
   if (!isDrawer || !drawing) return;
   e.preventDefault();
   const pos = getPos(e);
-  drawSegment(lastPos, pos, currentTool);
+  drawSegment(lastPos, pos, currentTool); // local drawing is always smooth, every move
   lastPos = pos;
 
+  // Compare against the last SENT point, not the last move — this way, several
+  // small slow movements correctly accumulate distance instead of each one
+  // resetting the reference point and silently never crossing the threshold.
   const dx = pos.x - lastSentPos.x, dy = pos.y - lastSentPos.y;
   if (Math.sqrt(dx * dx + dy * dy) >= MIN_STROKE_DISTANCE) {
     const stroke = { from: toFraction(lastSentPos), to: toFraction(pos), tool: currentTool };
     turnStrokes.push(stroke);
     socket.emit("stroke", stroke);
-    strokesSent += 1;
-    debugCounter.textContent = `strokes sent: ${strokesSent}`;
     lastSentPos = pos;
   }
 }
@@ -146,10 +159,10 @@ clearBtn.addEventListener("click", () => {
   socket.emit("clearCanvas");
 });
 
-let strokesReceived = 0;
+// Remote strokes from the drawer, and remote clears — the drawer sends
+// fractional (0-1) coordinates so this scales correctly to OUR OWN canvas
+// size, whatever device we're on.
 socket.on("stroke", (stroke) => {
-  strokesReceived += 1;
-  debugCounter.textContent = `strokes received: ${strokesReceived}`;
   turnStrokes.push(stroke);
   drawSegment(fromFraction(stroke.from), fromFraction(stroke.to), stroke.tool);
 });
@@ -158,6 +171,7 @@ socket.on("clearCanvas", () => ctx.clearRect(0, 0, canvas.width, canvas.height))
 // ---------- Join flow ----------
 joinBtn.addEventListener("click", () => {
   const name = nameInput.value.trim() || "Player";
+  // Digits only — no letters means no upper/lowercase mismatch between devices.
   roomId = (roomInput.value || "").replace(/\D/g, "").trim() || String(Math.floor(1000 + Math.random() * 9000));
   socket.emit("joinRoom", { roomId, name });
   joinScreen.classList.add("hidden");
@@ -195,6 +209,7 @@ socket.on("state", (state) => {
   canvas.style.cursor = isDrawer ? "crosshair" : "not-allowed";
   const isHost = state.hostId === myId;
 
+  // The drawer already knows the word, so they can't draw AND guess — only guessers guess.
   guessInput.disabled = isDrawer;
   guessInput.placeholder = isDrawer ? "You're drawing, sit back and watch guesses roll in" : "Type your guess…";
   document.querySelectorAll(".tool").forEach((b) => (b.disabled = !isDrawer));
@@ -211,7 +226,8 @@ socket.on("state", (state) => {
     startBtn.classList.add("hidden");
   } else if (state.phase === "drawing") {
     boardStatus.textContent = isDrawer ? "Draw it!" : "Guess the drawing!";
-    if (isDrawer) wordBlank.textContent = "";
+    if (isDrawer) wordBlank.textContent = ""; // drawer's own word is set separately via the "yourWord" event
+    // Guessers get no letter-count hint at all now — just the prompt above.
   } else if (state.phase === "roundEnd") {
     startBtn.classList.add("hidden");
   } else if (state.phase === "gameEnd") {
@@ -237,15 +253,11 @@ socket.on("yourWord", (wordObj) => {
   wordBlank.textContent = `${wordObj.word} (${wordObj.hint})`;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   turnStrokes = [];
-  strokesSent = 0;
-  debugCounter.textContent = "strokes sent: 0";
 });
 
 socket.on("roundStarted", () => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   turnStrokes = [];
-  strokesReceived = 0;
-  debugCounter.textContent = "strokes received: 0";
 });
 
 socket.on("turnEnded", ({ reason, word }) => {
