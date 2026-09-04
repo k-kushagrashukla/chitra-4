@@ -278,9 +278,10 @@ app.get("/admin", (req, res) => {
 </body></html>`);
 });
 
-const TURN_SECONDS = 70;
+const TURN_SECONDS = 60;
 const WORD_CHOICE_SECONDS = 10;
 const ROUNDS = 3;
+const MAX_PLAYERS = 5; // rooms stop accepting new joiners past this — keeps turn length and UI manageable
 
 // In-memory room store. Fine for MVP; swap for Redis if you need multi-instance scaling later.
 const rooms = {}; // roomId -> room state
@@ -420,9 +421,13 @@ io.on("connection", (socket) => {
   stats.totalConnectionsEver += 1;
   socket.on("joinRoom", ({ roomId, name }) => {
     const room = getRoom(roomId);
+    if (room.players.length >= MAX_PLAYERS) {
+      socket.emit("roomFull", { roomId, max: MAX_PLAYERS });
+      return;
+    }
     socket.join(roomId);
     room.players.push({ id: socket.id, name: name || "Player", score: 0, hasGuessed: false });
-    if (!room.hostId) room.hostId = socket.id; // first player in an empty room is the host
+    if (!room.hostId) room.hostId = socket.id;
     socket.data.roomId = roomId;
     broadcastState(room);
   });

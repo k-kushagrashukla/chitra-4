@@ -171,13 +171,21 @@ socket.on("clearCanvas", () => ctx.clearRect(0, 0, canvas.width, canvas.height))
 // ---------- Join flow ----------
 joinBtn.addEventListener("click", () => {
   const name = nameInput.value.trim() || "Player";
-  // Digits only — no letters means no upper/lowercase mismatch between devices.
   roomId = (roomInput.value || "").replace(/\D/g, "").trim() || String(Math.floor(1000 + Math.random() * 9000));
+  document.getElementById("joinError").classList.add("hidden");
   socket.emit("joinRoom", { roomId, name });
   joinScreen.classList.add("hidden");
   gameScreen.classList.remove("hidden");
   roomLabel.textContent = roomId;
   requestAnimationFrame(resizeCanvas);
+});
+
+socket.on("roomFull", ({ roomId: fullRoomId, max }) => {
+  gameScreen.classList.add("hidden");
+  joinScreen.classList.remove("hidden");
+  const err = document.getElementById("joinError");
+  err.textContent = `Room ${fullRoomId} already has ${max} players, the max for now. Try a different room code.`;
+  err.classList.remove("hidden");
 });
 
 startBtn.addEventListener("click", () => socket.emit("startGame"));
