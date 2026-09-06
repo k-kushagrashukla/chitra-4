@@ -278,7 +278,7 @@ app.get("/admin", (req, res) => {
 </body></html>`);
 });
 
-const TURN_SECONDS = 60;
+const TURN_SECONDS = 50;
 const WORD_CHOICE_SECONDS = 10;
 const ROUNDS = 3;
 const MAX_PLAYERS = 5; // rooms stop accepting new joiners past this — keeps turn length and UI manageable
